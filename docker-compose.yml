@@ -1,0 +1,38 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: gsti
+      POSTGRES_USER: gsti_owner
+      POSTGRES_PASSWORD: ${GSTI_OWNER_PASSWORD:?definir en .env}
+      GSTI_API_PASSWORD: ${GSTI_API_PASSWORD:?definir en .env}
+      GSTI_ANALYST_PASSWORD: ${GSTI_ANALYST_PASSWORD:?definir en .env}
+      TZ: UTC
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "127.0.0.1:5432:5432"   # solo accesible desde la máquina local
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gsti_owner -d gsti"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      # La API se conecta con el rol restringido; las migraciones, con el dueño
+      DATABASE_URL: postgresql+asyncpg://gsti_api:${GSTI_API_PASSWORD}@db:5432/gsti
+      MIGRATION_DATABASE_URL: postgresql+psycopg://gsti_owner:${GSTI_OWNER_PASSWORD}@db:5432/gsti
+    ports:
+      - "8000:8000"
+
+volumes:
+  pgdata:
