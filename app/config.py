@@ -29,10 +29,13 @@ class Settings(BaseSettings):
     # Zona horaria del estudio: define el inicio de la persona-semana.
     study_timezone: str = "America/Lima"
 
-    # --- Reglas de seguridad (protocolo de derivación) ---
-    # Los puntos de corte los define el equipo clínico; estos valores son conservadores.
-    bss_alert_cutoff: int = 1  # BSS total (ítems 1-19) >= cutoff -> alerta
-    phq9_item9_alert_min: int = 1  # PHQ-9 ítem 9 >= 1 -> alerta
+    # --- Gatillo clínico directo (artículo 3.10 / 4.6.2) ---
+    phq9_item9_alert_min: int = 1  # PHQ-9 ítem 9 > 0 -> riesgo alto
+    cssrs_bypass_level: int = 3  # C-SSRS nivel de ideación >= 3 -> riesgo alto
+    # Umbral de probabilidad del clasificador para "Riesgo alto" (artículo 4.6.1)
+    model_high_risk_threshold: float = 0.35
+    # --- Instrumentos complementarios (opcionales) ---
+    bss_alert_cutoff: int = 1
     flag_adversity_disclosure: bool = True  # adversidades > 0 -> revisión profesional
 
     # Límites de ingesta

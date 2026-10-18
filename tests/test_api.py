@@ -235,10 +235,10 @@ def test_predictions_create_alert_once(app_client, enrolled, staff_tokens):
     p = {"participant_code": code, "week_start": str(monday), "model_name": "enet_multimodal",
          "model_version": "0.1", "score": 0.81, "threshold": 0.4}
     r = app_client.post("/api/v1/predictions", headers=staff_tokens["researcher"], json={"predictions": [p]})
-    assert r.json() == {"stored": 1, "updated": 0, "alerts_created": 1}
+    assert r.json() == {"stored": 1, "updated": 0, "alerts_created": 1, "clinical_bypass_applied": 0}
     r = app_client.post("/api/v1/predictions", headers=staff_tokens["researcher"],
                         json={"predictions": [{**p, "score": 0.9}]})
-    assert r.json() == {"stored": 0, "updated": 1, "alerts_created": 0}
+    assert r.json() == {"stored": 0, "updated": 1, "alerts_created": 0, "clinical_bypass_applied": 0}
     # Una semana que se recalcula de negativa a positiva también debe alertar
     prev_week = str(monday - timedelta(days=7))
     neg = {**p, "week_start": prev_week, "score": 0.1}
@@ -246,7 +246,7 @@ def test_predictions_create_alert_once(app_client, enrolled, staff_tokens):
                            json={"predictions": [neg]}).json()["alerts_created"] == 0
     r = app_client.post("/api/v1/predictions", headers=staff_tokens["researcher"],
                         json={"predictions": [{**neg, "score": 0.7}]})
-    assert r.json() == {"stored": 0, "updated": 1, "alerts_created": 1}
+    assert r.json() == {"stored": 0, "updated": 1, "alerts_created": 1, "clinical_bypass_applied": 0}
     bad = {**p, "week_start": str(monday + timedelta(days=2))}
     assert app_client.post("/api/v1/predictions", headers=staff_tokens["researcher"],
                            json={"predictions": [bad]}).status_code == 422
@@ -335,3 +335,57 @@ def test_withdraw_revokes_access_and_purges_identity(app_client, staff_tokens, s
     assert app_client.post(f"/api/v1/participants/{code}/withdraw", headers=staff_tokens["admin"],
                            json={"purge_data": True}).status_code == 204
     assert sql("SELECT count(*) FROM core.participants WHERE code = %s", code)[0][0] == 0
+
+
+# ------------------------------------------------------------------ alineación con el artículo
+def test_minor_requires_assent_and_guardian_consent(app_client, staff_tokens, sql):
+    base = {"consent_version": "v1", "age_band": "16-17"}
+    assert app_client.post("/api/v1/participants", headers=staff_tokens["admin"], json=base).status_code == 422
+    ok = app_client.post("/api/v1/participants", headers=staff_tokens["admin"], json={
+        **base, "assent_at": now_iso(), "guardian_consent_at": now_iso()})
+    assert ok.status_code == 201, ok.text
+    assert ok.json()["participant"]["guardian_consent_at"] is not None
+    with pytest.raises(Exception, match="minor_consent"):  # la BD también lo exige
+        sql("UPDATE core.participants SET guardian_consent_at = NULL WHERE code = %s",
+            ok.json()["participant"]["code"])
+
+
+def _answers(n, v):
+    return [{"item": i, "value": v} for i in range(1, n + 1)]
+
+
+def test_features_view_and_server_side_bypass(app_client, enrolled, staff_tokens):
+    code, dev, _ = enrolled
+    d = lima_midnight(1)
+    obs = (blocks("steps", "health_connect", d, 48, 100) + blocks("at_home", "phone_gps", d, 20, 1)
+           + blocks("app_use", "phone_usage", d, 10, 1)
+           + [{"metric": "sleep_minutes", "source": "fitbit", "window_start": (d - timedelta(hours=2)).isoformat(),
+               "window_end": (d + timedelta(hours=6)).isoformat(), "value": 420}])
+    assert app_client.post("/api/v1/ingest/sensors", headers=dev,
+                           json={"batch_id": new_id(), "observations": obs}).json()["rejected"] == 0
+    when = (d + timedelta(hours=10)).isoformat()
+    for ins, ans in [("PHQ9", phq9(1)), ("GAD7", _answers(7, 2)), ("ULS6", _answers(6, 2)),
+                     ("CSSRS_SCREEN", [{"item": 1, "value": 0}, {"item": 2, "value": 0}, {"item": 6, "value": 0}])]:
+        r = app_client.post("/api/v1/questionnaires/responses", headers=dev, json={
+            "client_response_id": new_id(), "instrument": ins, "context": "weekly", "completed_at": when,
+            "answers": ans})
+        assert r.status_code == 201, (ins, r.text)
+
+    # El rol de servicio (microservicio ML) lee features; un clínico no
+    assert app_client.get("/api/v1/features/person-week", headers=staff_tokens["clinician"]).status_code == 403
+    rows = [f for f in app_client.get("/api/v1/features/person-week", headers=staff_tokens["service"]).json()
+            if f["participant_code"] == code]
+    assert len(rows) == 1
+    f = rows[0]
+    assert f["steps_daily_mean"] == 4800 and f["home_minutes_mean"] == 600 and f["app_use_minutes_mean"] == 300
+    assert f["sleep_minutes_mean"] == 420
+    assert (f["phq9_total"], f["phq9_total_excl_item9"], f["gad7_total"], f["uls6_total"], f["cssrs_level"]) == \
+           (9, 8, 14, 12, 0)
+    assert f["label_high_risk"] is True  # ítem 9 = 1
+
+    # Probabilidad baja, pero el gatillo clínico fuerza "alto" y no duplica la alerta
+    r = app_client.post("/api/v1/predictions", headers=staff_tokens["service"], json={"predictions": [{
+        "participant_code": code, "week_start": f["week_start"], "model_name": "random_forest",
+        "model_version": "1", "score": 0.05}]})
+    assert r.json() == {"stored": 1, "updated": 0, "alerts_created": 0, "clinical_bypass_applied": 1}
+    assert app_client.get("/api/v1/alerts", headers=staff_tokens["service"]).status_code == 403

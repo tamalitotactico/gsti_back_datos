@@ -65,8 +65,10 @@ def _likert(prefix: str, n: int, lo: int, hi: int, safety: set[int] | None = Non
 
 
 INSTRUMENTS: list[InstrumentDef] = [
+    # Bloque de autoinforme del chatbot según el artículo (3.10): PHQ-9, GAD-7, ULS-6 y C-SSRS.
+    # La etiqueta de referencia (ground truth) se obtiene de C-SSRS + ítem 9 del PHQ-9.
     InstrumentDef(
-        "CSSRS_SCREEN", "Columbia Suicide Severity Rating Scale - Screener", "screen-recent", "cssrs", "safety", "weekly",
+        "CSSRS_SCREEN", "Columbia Suicide Severity Rating Scale - Screener", "screen-recent", "cssrs", "reference", "weekly",
         [
             ItemDef(1, "wish_dead", 0, 1, is_safety_item=True),
             ItemDef(2, "active_thoughts", 0, 1, is_safety_item=True),
@@ -81,8 +83,9 @@ INSTRUMENTS: list[InstrumentDef] = [
                   [ItemDef(1, "nssi_recent", 0, 1, is_safety_item=True)]),
     InstrumentDef("PHQ9", "Patient Health Questionnaire-9", "1", "sum", "predictor", "baseline",
                   _likert("phq9", 9, 0, 3, safety={9})),
+    # Instrumentos complementarios (opcionales; no forman parte del modelo del artículo)
     InstrumentDef(
-        "BSS", "Beck Scale for Suicide Ideation", "1", "bss", "reference", "weekly",
+        "BSS", "Beck Scale for Suicide Ideation", "1", "bss", "safety", "weekly",
         [ItemDef(i, f"bss_{i}", 0, 2, is_safety_item=True) for i in range(1, 20)]
         + [ItemDef(20, "bss_prior_attempts", 0, 2, scored=False, is_safety_item=True),
            ItemDef(21, "bss_last_attempt_intent", 0, 2, scored=False, is_safety_item=True)],
@@ -90,6 +93,8 @@ INSTRUMENTS: list[InstrumentDef] = [
     # Valor 1 = el participante marcó "Verdadero"; la clave se aplica en el servidor
     InstrumentDef("BHS", "Beck Hopelessness Scale", "1", "bhs", "predictor", "baseline+final",
                   _likert("bhs", 20, 0, 1)),
+    InstrumentDef("ULS6", "UCLA Loneliness Scale - versión corta de 6 ítems", "1", "sum", "predictor", "weekly",
+                  _likert("uls6", 6, 1, 4)),
     InstrumentDef("UCLA3", "UCLA Loneliness Scale - 3 ítems", "1", "sum", "predictor", "monthly",
                   _likert("ucla", 3, 1, 3)),
     InstrumentDef("ISI", "Insomnia Severity Index", "1", "sum", "predictor", "biweekly",

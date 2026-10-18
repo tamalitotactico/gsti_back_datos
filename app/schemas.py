@@ -3,9 +3,11 @@ import uuid
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
-Role = Literal["admin", "clinician", "researcher"]
+Role = Literal["admin", "clinician", "researcher", "service"]
+AgeBand = Literal["16-17", "18-20", "21-23", "24-26", "27-29", "30-35"]
+RiskLevel = Literal["bajo", "moderado", "alto"]
 
 
 class ORM(BaseModel):
@@ -52,10 +54,18 @@ class IdentityIn(BaseModel):
 class ParticipantCreateIn(BaseModel):
     consent_version: str = Field(min_length=1, max_length=40)
     cohort: str | None = Field(default=None, max_length=60)
-    age_band: Literal["18-20", "21-23", "24-26", "27+"] | None = None
+    age_band: AgeBand | None = None
     sex: Literal["F", "M", "X", "NR"] | None = None
     semester: int | None = Field(default=None, ge=1, le=14)
+    assent_at: AwareDatetime | None = Field(default=None, description="Asentimiento del menor (16-17)")
+    guardian_consent_at: AwareDatetime | None = Field(default=None, description="Autorización del representante legal")
     identity: IdentityIn | None = None
+
+    @model_validator(mode="after")
+    def _minor_consent(self):
+        if self.age_band == "16-17" and (self.assent_at is None or self.guardian_consent_at is None):
+            raise ValueError("Participantes de 16-17 años requieren asentimiento y autorización del representante legal")
+        return self
 
 
 class ParticipantOut(ORM):
@@ -69,6 +79,8 @@ class ParticipantOut(ORM):
     consent_version: str
     enrolled_at: datetime
     withdrawn_at: datetime | None
+    assent_at: datetime | None = None
+    guardian_consent_at: datetime | None = None
 
 
 class EnrollmentOut(BaseModel):
@@ -242,10 +254,12 @@ class AlertResolveIn(BaseModel):
 class PredictionIn(BaseModel):
     participant_code: str
     week_start: date
-    model_name: str = Field(max_length=60)
+    model_name: str = Field(max_length=60, examples=["random_forest", "xgboost"])
     model_version: str = Field(max_length=40)
-    score: float = Field(ge=0, le=1)
-    threshold: float = Field(ge=0, le=1)
+    score: float = Field(ge=0, le=1, description="Probabilidad de la clase Riesgo alto")
+    threshold: float = Field(default=0.35, ge=0, le=1)
+    risk_level: Literal["bajo", "moderado"] | None = Field(
+        default=None, description="Nivel sugerido por el modelo cuando score < threshold")
 
     @field_validator("week_start")
     @classmethod
@@ -263,6 +277,25 @@ class PredictionBatchOut(BaseModel):
     stored: int
     updated: int
     alerts_created: int
+    clinical_bypass_applied: int = 0
+
+
+class PersonWeekFeatures(BaseModel):
+    """Vector de 8 indicadores por persona-semana (artículo 3.10/3.11) y etiqueta de referencia."""
+    participant_code: str
+    week_start: date
+    steps_daily_mean: float | None
+    sleep_minutes_mean: float | None
+    home_minutes_mean: float | None
+    app_use_minutes_mean: float | None
+    phq9_total: float | None
+    phq9_total_excl_item9: float | None
+    gad7_total: float | None
+    uls6_total: float | None
+    cssrs_level: float | None
+    phq9_item9: int | None
+    n_days_sensed: int
+    label_high_risk: bool | None
 
 
 # ------------------------------------------------------------------ métricas del sistema

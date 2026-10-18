@@ -62,7 +62,8 @@ POST /questionnaires/responses
 
 - El teléfono **no recibe puntajes ni alertas**. Si `support_resources` es `true`, la app debe mostrar de inmediato la pantalla de recursos de ayuda (p. ej., Línea 113, opción 5).
 - Saltos permitidos: C-SSRS omite 3–5 si el ítem 2 = 0 y el 7 si el 6 = 0; BSS omite 6–19 si los ítems 4 y 5 = 0.
-- BHS: enviar `1` = "Verdadero", `0` = "Falso"; la clave se aplica en el servidor.
+- Bloque del chatbot según el artículo: `PHQ9` (ítems 1-9, 0-3), `GAD7` (1-7, 0-3), `ULS6` (1-6, 1-4) y `CSSRS_SCREEN` (1-7, 0/1).
+- BHS (complementario): enviar `1` = "Verdadero", `0` = "Falso"; la clave se aplica en el servidor.
 - Los textos de los ítems los pone la app (respetar la licencia de cada instrumento). Catálogo con rangos: `GET /catalog/instruments`.
 
 Avisos EMA: `GET /ema/prompts?hours=48` devuelve los vigentes y próximos para agendar notificaciones locales; al mostrar la notificación, `POST /ema/prompts/{id}/delivered`.

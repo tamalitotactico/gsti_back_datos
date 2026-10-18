@@ -55,6 +55,8 @@ class Participant(Base):
     withdrawn_at: Mapped[datetime | None] = mapped_column(TS)
     enrollment_code_hash: Mapped[str | None] = mapped_column(Text, unique=True)
     enrollment_code_expires_at: Mapped[datetime | None] = mapped_column(TS)
+    assent_at: Mapped[datetime | None] = mapped_column(TS)
+    guardian_consent_at: Mapped[datetime | None] = mapped_column(TS)
 
 
 class Device(Base):
@@ -202,6 +204,8 @@ class ModelPrediction(Base):
     score: Mapped[float] = mapped_column(Float)
     threshold: Mapped[float] = mapped_column(Float)
     predicted_positive: Mapped[bool] = mapped_column(Boolean)
+    risk_level: Mapped[str] = mapped_column(Text)
+    clinical_bypass: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(TS, server_default="now()")
 
 

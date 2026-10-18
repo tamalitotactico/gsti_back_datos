@@ -90,7 +90,7 @@ def staff_tokens(app_client, db_dsn):
     pwd = "una-clave-larga-123"
     tokens = {}
     with psycopg.connect(db_dsn, autocommit=True) as c:
-        for role in ("admin", "clinician", "researcher"):
+        for role in ("admin", "clinician", "researcher", "service"):
             email = f"{role}@test.pe"
             c.execute("INSERT INTO admin.staff_users (email, full_name, role, password_hash) "
                       "VALUES (%s, %s, %s, %s) ON CONFLICT (email) DO NOTHING",

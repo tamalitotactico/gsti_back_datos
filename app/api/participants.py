@@ -50,7 +50,8 @@ async def enroll(
     session: AsyncSession = Depends(get_session),
 ) -> EnrollmentOut:
     p = Participant(consent_version=body.consent_version, cohort=body.cohort, age_band=body.age_band,
-                    sex=body.sex, semester=body.semester)
+                    sex=body.sex, semester=body.semester, assent_at=body.assent_at,
+                    guardian_consent_at=body.guardian_consent_at)
     code = _issue_code(p)
     session.add(p)
     await session.flush()

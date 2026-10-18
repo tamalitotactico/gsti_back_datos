@@ -3,7 +3,7 @@ import pytest
 
 from app.catalog import INSTRUMENTS_BY_CODE as I
 from app.config import Settings
-from app.services.safety import evaluate_questionnaire
+from app.services.safety import evaluate_questionnaire, risk_from_prediction
 from app.services.scoring import ScoringError, validate_and_score
 
 S = Settings(bss_alert_cutoff=1, phq9_item9_alert_min=1)
@@ -19,6 +19,35 @@ def test_phq9_sum_and_item9_alert():
     out = evaluate_questionnaire("PHQ9", r, S)
     assert [(a.rule_code, a.severity) for a in out.alerts] == [("phq9_item9", "high")]
     assert out.support_resources
+
+
+def test_phq9_item9_one_triggers_clinical_bypass():
+    r = validate_and_score(I["PHQ9"], {**full("PHQ9", 0), 9: 1})
+    out = evaluate_questionnaire("PHQ9", r, S)
+    assert out.alerts[0].severity == "high" and out.clinical_bypass
+    assert out.alerts[0].detail["risk_level"] == "alto"
+
+
+def test_cssrs_level3_is_bypass_level2_moderate():
+    r3 = validate_and_score(I["CSSRS_SCREEN"], {1: 1, 2: 1, 3: 1, 4: 0, 5: 0, 6: 0})
+    out3 = evaluate_questionnaire("CSSRS_SCREEN", r3, S)
+    assert r3.total == 3 and out3.alerts[0].severity == "high" and out3.clinical_bypass
+    r2 = validate_and_score(I["CSSRS_SCREEN"], {1: 1, 2: 1, 3: 0, 4: 0, 5: 0, 6: 0})
+    out2 = evaluate_questionnaire("CSSRS_SCREEN", r2, S)
+    assert out2.alerts[0].severity == "moderate" and not out2.clinical_bypass
+
+
+def test_uls6_sum():
+    assert validate_and_score(I["ULS6"], full("ULS6", 1)).total == 6
+    assert validate_and_score(I["ULS6"], full("ULS6", 4)).total == 24
+    with pytest.raises(ScoringError):
+        validate_and_score(I["ULS6"], {**full("ULS6", 1), 2: 5})
+
+
+def test_prediction_risk_levels():
+    assert risk_from_prediction(0.35, 0.35, None) == "alto"
+    assert risk_from_prediction(0.34, 0.35, "moderado") == "moderado"
+    assert risk_from_prediction(0.10, 0.35, None) == "bajo"
 
 
 def test_phq9_no_alert_when_item9_zero():

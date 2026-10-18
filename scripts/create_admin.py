@@ -32,7 +32,7 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--email", required=True)
     ap.add_argument("--name", required=True)
-    ap.add_argument("--role", default="admin", choices=["admin", "clinician", "researcher"])
+    ap.add_argument("--role", default="admin", choices=["admin", "clinician", "researcher", "service"])
     args = ap.parse_args()
     pwd = os.environ.get("GSTI_ADMIN_PASSWORD") or getpass.getpass("Contraseña (mín. 12): ")
     if len(pwd) < 12:
